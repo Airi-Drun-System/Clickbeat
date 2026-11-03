@@ -321,16 +321,18 @@ async function addFile(file) {
     $('loading').hidden = true;
     songs.splice(1, 0, song);
     select(id);
-    if (tags.title) findLyrics(song, true); // слова подтянутся сами, если найдутся
+    if (tags.title) findLyrics(song, true).then((ok) => { if (ok && plSong === song) renderLines(); }); // слова подтянутся сами, если найдутся
+    if (plOpen() && !plSong) plLoad(song, true); else plUpText();
   } catch (e) {
     showLoading('Не получилось', e.message && !/decode/i.test(e.message) ? e.message : 'Браузер не смог прочитать этот файл. Попробуй mp3, ogg или wav.', 0);
     setTimeout(() => { $('loading').hidden = true; }, 3200);
   }
 }
-$('file').addEventListener('change', (e) => { addFile(e.target.files[0]); e.target.value = ''; });
+async function addFiles(list) { for (const f of list) await addFile(f); } // по одной: разбор тяжёлый
+$('file').addEventListener('change', (e) => { addFiles([...e.target.files]); e.target.value = ''; });
 for (const ev of ['dragenter', 'dragover']) window.addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.add('over'); });
 for (const ev of ['dragleave', 'drop']) window.addEventListener(ev, (e) => { e.preventDefault(); $('drop').classList.remove('over'); });
-window.addEventListener('drop', (e) => { const f = [...(e.dataTransfer?.files || [])].find((x) => /^audio\//.test(x.type) || /\.(mp3|ogg|wav|flac|m4a)$/i.test(x.name)); if (f) addFile(f); });
+window.addEventListener('drop', (e) => { addFiles([...(e.dataTransfer?.files || [])].filter((x) => /^audio\//.test(x.type) || /\.(mp3|ogg|wav|flac|m4a)$/i.test(x.name))); });
 
 function getMap(song, d) {
   const key = song.id + '|' + d;
@@ -493,9 +495,9 @@ $('imgFile').addEventListener('change', (e) => {
 async function findLyrics(song, quiet) {
   if (!window.cbApp || !song.an) return false;
   try {
-    const text = await window.cbApp.findLyrics({ title: song.name, artist: song.artist || '', duration: Math.round(song.an.duration / 1000) });
-    const lines = text ? parseLRC(text) : [];
-    if (!lines.length) return false;
+    const r = await window.cbApp.findLyrics({ title: song.name, artist: song.artist || '', duration: Math.round(song.an.duration / 1000) });
+    const lines = r && r.synced ? parseLRC(r.synced) : [];
+    if (!lines.length) { if (r && r.plain) { song.plain = r.plain; saveSong(song); } return false; }
     song.lyrics = lines;
     saveSong(song);
     if (selId === song.id) renderHero(false);
@@ -523,6 +525,7 @@ $('lrcFile').addEventListener('change', async (e) => {
   song.lyrics = lines;
   saveSong(song);
   renderHero(false);
+  if (plSong === song) renderLines();
 });
 
 async function loadLibrary() {
@@ -607,6 +610,7 @@ function startAudio(fromMs) {
 async function startGame(auto) {
   if (auto !== true) auto = false;
   if (!auto && !store.get('hw.tut', false)) { openHowto(true); return; }
+  plAudio.pause();
   const song = songs.find((s) => s.id === selId);
   if (!song || !song.an) return;
   ensureAudio();
@@ -937,6 +941,7 @@ addEventListener('mousedown', (e) => {
 addEventListener('mouseup', (e) => { if (e.button === 0 || e.button === 2) { keyState(e.button === 2 ? 1 : 0, false); held = Math.max(0, held - 1); } });
 addEventListener('contextmenu', (e) => { if (state === 'play') e.preventDefault(); });
 addEventListener('keydown', (e) => {
+  if (state === 'menu' && plOpen()) { plKey(e); return; }
   if (state === 'play') {
     if ((e.code === 'KeyZ' || e.code === 'KeyX') && !(game && game.auto)) { // по коду клавиши: работает и в русской раскладке
       e.preventDefault();
@@ -992,6 +997,232 @@ function openHowto(thenPlay) { howtoThenPlay = thenPlay; $('howGo').textContent 
 $('howBtn').addEventListener('click', () => openHowto(false));
 $('howGo').addEventListener('click', () => { $('howto').hidden = true; store.set('hw.tut', true); if (howtoThenPlay) startGame(false); });
 $('settings').addEventListener('click', (e) => { if (e.target === $('settings')) $('settings').hidden = true; });
+
+
+// ==================== плеер: свои песни со словами-караоке ====================
+const plAudio = new Audio();
+let plSong = null, plSrcNode = null, plUrl = '', plLine = -2, kick = 0, bassAvg = 0, seeking = false, sync = null;
+const plList = () => songs.filter((s) => s.blob); // встроенный демо-трек живёт только в игре
+const plOpen = () => !$('player').hidden;
+const PATH = { play: 'M8 5v14l11-7z', pause: 'M6 5h4v14H6zM14 5h4v14h-4z' };
+
+// звук плеера идёт через общий тракт игры: та же громкость и анализатор баса для обложки
+function plPlay() {
+  ensureAudio();
+  if (!plSrcNode) { plSrcNode = actx.createMediaElementSource(plAudio); plSrcNode.connect(musicGain); }
+  if (actx.state === 'suspended') actx.resume();
+  plAudio.play().catch(() => {});
+}
+function plUpText() {
+  const list = plList(), nx = plSong && list[(list.indexOf(plSong) + 1) % list.length];
+  $('plUp').textContent = '';
+  if (!nx || nx === plSong) return;
+  const b = document.createElement('b'); b.textContent = nx.name;
+  $('plUp').append('Дальше: ', b);
+}
+async function plLoad(song, autoplay) {
+  plSong = song;
+  if (plUrl) URL.revokeObjectURL(plUrl);
+  plUrl = URL.createObjectURL(song.blob);
+  plAudio.src = plUrl;
+  $('plTitle').textContent = song.name;
+  $('plArtist').textContent = song.artist || 'Твой трек';
+  plUpText();
+  renderLines();
+  if (selId !== song.id) select(song.id); // фон, цвета и меню — под эту песню
+  if (autoplay) plPlay();
+  await songImage(song);
+  if (plSong !== song) return;
+  $('plImg').src = song.imgUrl;
+  if (window.MediaMetadata) navigator.mediaSession.metadata = new MediaMetadata({ title: song.name, artist: song.artist || '', artwork: [{ src: song.imgUrl }] });
+}
+function plToggle() {
+  if (!plSong) { const s = plList()[0]; if (s) plLoad(s, true); return; }
+  if (plAudio.paused) plPlay(); else plAudio.pause();
+}
+function plStep(d) {
+  const list = plList();
+  if (sync || !list.length) return;
+  if (d < 0 && plAudio.currentTime > 3) { plAudio.currentTime = 0; return; } // как в любом плеере: сначала в начало песни
+  plLoad(list[((plSong ? list.indexOf(plSong) : -1) + d + list.length) % list.length], true);
+}
+function plVolume(d) {
+  settings.music = Math.round(Math.max(0, Math.min(1, settings.music + d)) * 20) / 20;
+  applyVolumes(); saveSettings();
+}
+plAudio.addEventListener('play', () => { $('plPlay').querySelector('path').setAttribute('d', PATH.pause); $('plPlay').ariaLabel = 'Пауза'; });
+plAudio.addEventListener('pause', () => { $('plPlay').querySelector('path').setAttribute('d', PATH.play); $('plPlay').ariaLabel = 'Играть'; });
+plAudio.addEventListener('loadedmetadata', () => { $('plDur').textContent = fmtDur(plAudio.duration * 1000); });
+plAudio.addEventListener('ended', () => {
+  if (!sync) return plStep(1);
+  // песня кончилась посреди разметки: сохраняем то, что успели
+  if (sync.i) { sync.lines.length = sync.i; syncDone(true); } else syncDone(false);
+});
+if ('mediaSession' in navigator) {
+  for (const [a, f] of [['play', plPlay], ['pause', () => plAudio.pause()], ['previoustrack', () => plStep(-1)], ['nexttrack', () => plStep(1)]]) {
+    try { navigator.mediaSession.setActionHandler(a, f); } catch { /* старый браузер */ }
+  }
+}
+
+const SYNC_HINT = 'Вставь текст песни и разметь его: песня играет, а ты жмёшь пробел, когда начинается каждая строка. Минута работы.';
+function renderLines() {
+  const box = $('plLines');
+  box.textContent = '';
+  const lines = sync ? sync.lines.map((text) => ({ text })) : (plSong && plSong.lyrics) || [];
+  $('plLyr').classList.toggle('syncing', !!sync);
+  $('plEmpty').hidden = lines.length > 0;
+  $('plEmpty').querySelector('h3').textContent = plSong ? 'У песни пока нет слов' : 'Песен пока нет';
+  $('plEmptyText').textContent = plSong ? SYNC_HINT : 'Нажми «Добавить песни» или перетащи mp3 в окно. Можно сразу несколько.';
+  $('plEmpty').querySelector('.actions').hidden = !plSong;
+  $('plFind').hidden = !window.cbApp;
+  lines.forEach((l) => {
+    const el = document.createElement('div');
+    el.className = 'ln' + (l.text ? '' : ' gap');
+    el.textContent = l.text || '• • •';
+    if (!sync) el.addEventListener('click', () => { plAudio.currentTime = Math.max(0, l.t / 1000); if (plAudio.paused) plPlay(); });
+    box.appendChild(el);
+  });
+  box.style.transform = '';
+  plLine = -2;
+}
+
+let lastCur = '';
+function plTick() {
+  if (!plOpen()) return;
+  const t = plAudio.currentTime * 1000;
+  if (!seeking && plAudio.duration) {
+    const v = plAudio.currentTime / plAudio.duration;
+    $('plSeek').value = Math.round(v * 1000);
+    $('plSeek').style.setProperty('--pos', (v * 100).toFixed(2) + '%');
+    const c = fmtDur(t);
+    if (c !== lastCur) $('plCur').textContent = lastCur = c;
+  }
+  // обложка подпрыгивает на ударах баса: сравниваем с недавним средним, а не с порогом
+  if (analyser && !plAudio.paused) {
+    analyser.getByteFrequencyData(freq);
+    const b = (freq[0] + freq[1] + freq[2]) / 765;
+    bassAvg += (b - bassAvg) * 0.04;
+    kick = Math.max(Math.min(1, (b - bassAvg) * 5), kick * 0.86);
+  } else kick *= 0.86;
+  $('player').style.setProperty('--kick', kick.toFixed(3));
+
+  const L = plSong && plSong.lyrics, els = $('plLines').children;
+  let i;
+  if (sync) i = sync.i;
+  else {
+    if (!L || !L.length) return;
+    i = -1;
+    while (i + 1 < L.length && L[i + 1].t <= t) i++;
+  }
+  if (i !== plLine && els.length) {
+    plLine = i;
+    for (let k = 0; k < els.length; k++) {
+      els[k].classList.toggle('past', k < i);
+      els[k].classList.toggle(sync ? 'next' : 'on', k === i);
+    }
+    const el = els[Math.max(0, Math.min(els.length - 1, i))];
+    $('plLines').style.transform = `translateY(${-(el.offsetTop + el.offsetHeight / 2)}px)`;
+  }
+  if (!sync && i >= 0) {
+    // строка заливается слева направо за время, пока её поют
+    const end = i + 1 < L.length ? L[i + 1].t : L[i].t + 4000;
+    const p = Math.min(1, (t - L[i].t) / Math.max(400, Math.min(end - L[i].t, 7000) * 0.85));
+    els[i].style.setProperty('--p', p.toFixed(3));
+  }
+}
+
+// разметка слов: песня с начала, пробел на каждой новой строке
+function syncOpen(text) {
+  $('syncText').value = text != null ? text : plSong.lyrics && plSong.lyrics.length ? plSong.lyrics.map((l) => l.text).filter(Boolean).join('\n') : plSong.plain || '';
+  $('syncDlg').hidden = false;
+  $('syncText').focus();
+}
+function syncTap() {
+  sync.stamps[sync.i] = Math.max(0, plAudio.currentTime * 1000 - 120); // люди жмут чуть позже, чем начинают петь
+  sync.i++;
+  if (sync.i >= sync.lines.length) syncDone(true);
+}
+function syncUndo() {
+  if (!sync.i) return;
+  sync.i--;
+  plAudio.currentTime = Math.max(0, sync.stamps[sync.i] / 1000 - 3);
+}
+function syncDone(save) {
+  if (save) {
+    plSong.lyrics = sync.lines.map((text, k) => ({ t: sync.stamps[k], text }));
+    saveSong(plSong);
+    if (selId === plSong.id) renderHero(false);
+  }
+  sync = null;
+  $('syncBar').hidden = true;
+  renderLines();
+  if (save) { plAudio.currentTime = 0; plPlay(); }
+}
+$('syncGo').addEventListener('click', () => {
+  const lines = $('syncText').value.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  if (!lines.length) { $('syncText').focus(); return; }
+  $('syncDlg').hidden = true;
+  sync = { lines, i: 0, stamps: [] };
+  $('syncBar').hidden = false;
+  renderLines();
+  plAudio.currentTime = 0;
+  plPlay();
+});
+$('syncCancel').addEventListener('click', () => { $('syncDlg').hidden = true; });
+$('syncTap').addEventListener('click', () => sync && syncTap());
+$('syncUndo').addEventListener('click', () => sync && syncUndo());
+$('syncStop').addEventListener('click', () => sync && syncDone(false));
+
+function openPlayer() {
+  $('menu').hidden = true;
+  $('player').hidden = false;
+  const list = plList(), s = list.find((x) => x.id === selId) || (list.includes(plSong) ? plSong : list[0]);
+  if (s && s !== plSong) plLoad(s, true);
+  else { if (!s) plSong = null; renderLines(); plUpText(); }
+}
+function closePlayer() {
+  if (sync) syncDone(false);
+  $('player').hidden = true;
+  $('menu').hidden = false;
+}
+function plKey(e) {
+  const tag = e.target.tagName;
+  if (!$('syncDlg').hidden || tag === 'TEXTAREA') { if (e.code === 'Escape') $('syncDlg').hidden = true; return; }
+  if (sync) {
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (!e.repeat) syncTap(); }
+    else if (e.code === 'Backspace') { e.preventDefault(); syncUndo(); }
+    else if (e.code === 'Escape') syncDone(false);
+    return;
+  }
+  if (e.code === 'Space' && tag === 'BUTTON') return; // кнопка с фокуса клавиатуры нажмётся сама
+  const act = { ArrowRight: () => plStep(1), ArrowLeft: () => plStep(-1), Space: plToggle, ArrowUp: () => plVolume(0.05), ArrowDown: () => plVolume(-0.05), Escape: closePlayer }[e.code];
+  if (act) { e.preventDefault(); if (!e.repeat || e.code.startsWith('ArrowU') || e.code.startsWith('ArrowD')) act(); }
+}
+$('plBtn').addEventListener('click', openPlayer);
+$('plBack').addEventListener('click', closePlayer);
+$('plAdd').addEventListener('click', () => $('file').click());
+$('plPlay').addEventListener('click', plToggle);
+$('plPrev').addEventListener('click', () => plStep(-1));
+$('plNext').addEventListener('click', () => plStep(1));
+$('plSync').addEventListener('click', () => syncOpen());
+$('plLrc').addEventListener('click', () => { if (plSong) syncOpen(); });
+$('plFile').addEventListener('click', () => $('lrcFile').click());
+$('plFind').addEventListener('click', async () => {
+  showLoading('Ищу слова', `«${plSong.name}» на lrclib.net…`, 0.5);
+  if (await findLyrics(plSong)) { renderLines(); return; }
+  if (plSong.plain) { syncOpen(plSong.plain); return; } // нашёлся текст без таймингов: осталось разметить
+  showLoading('Слова не нашлись', 'Вставь текст сам и разметь пробелом — это минута.', 0);
+  setTimeout(() => { $('loading').hidden = true; }, 2600);
+});
+// мышью нажатая кнопка не держит фокус, чтобы пробел оставался паузой
+$('player').addEventListener('mouseup', (e) => { const b = e.target.closest('button,input'); if (b) b.blur(); });
+$('plSeek').addEventListener('input', () => {
+  seeking = true;
+  const v = $('plSeek').value / 1000;
+  $('plSeek').style.setProperty('--pos', v * 100 + '%');
+  if (plAudio.duration) $('plCur').textContent = fmtDur(v * plAudio.duration * 1000);
+});
+$('plSeek').addEventListener('change', () => { if (plAudio.duration) plAudio.currentTime = $('plSeek').value / 1000 * plAudio.duration; seeking = false; });
 
 // ==================== отрисовка ====================
 const DISPLAY = (px) => `${px}px "Dela Gothic One", "Arial Black", sans-serif`;
@@ -1464,7 +1695,7 @@ function frame(now) {
     drawOverlay(t);
   } else {
     lastT = null;
-    if (state === 'menu') g.clearRect(0, 0, W, H);
+    if (state === 'menu') { g.clearRect(0, 0, W, H); plTick(); }
     else drawBackground(now, 0);
   }
   void dt;
