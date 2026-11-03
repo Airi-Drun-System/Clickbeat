@@ -222,51 +222,6 @@ body.playing.touch .tbtn[hidden]{display:none}
   .res{grid-template-columns:1fr}
   .res .bigGrade{grid-row:auto}
 }
-
-/* ---------- плеер: обложка качается от баса, слова идут караоке ---------- */
-#player{--kick:0}
-.pl{flex:1;min-height:0;display:grid;grid-template-columns:minmax(260px,420px) minmax(0,1fr);gap:clamp(24px,5vw,72px);align-items:center;max-width:1280px;width:100%;margin:0 auto}
-.plLeft{display:flex;flex-direction:column;gap:18px;min-width:0}
-.plCover{width:100%;max-width:min(420px,48vh);animation:none;transform:scale(calc(1 + var(--kick)*.05));transition:transform .08s linear,box-shadow .6s;box-shadow:0 30px 90px calc(-10px + var(--kick)*30px) color-mix(in srgb,var(--a1) calc(40% + var(--kick)*40%),transparent),0 0 0 1px rgba(255,255,255,.08)}
-.plMeta h2{font:clamp(26px,2.8vw,38px)/1.05 var(--display);letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.plMeta p{color:var(--dim);font-size:16px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.plSeek{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;font:600 13px var(--ui);color:var(--dim);font-variant-numeric:tabular-nums}
-.plSeek input{appearance:none;height:6px;border-radius:99px;background:linear-gradient(90deg,var(--a1) var(--pos,0%),rgba(255,255,255,.14) var(--pos,0%));cursor:pointer}
-.plSeek input::-webkit-slider-thumb{appearance:none;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px color-mix(in srgb,var(--a1) 45%,transparent);transition:transform .2s var(--spring)}
-.plSeek input:hover::-webkit-slider-thumb{transform:scale(1.25)}
-.plBtns{display:flex;align-items:center;justify-content:center;gap:18px}
-.plBtns button{display:grid;place-items:center;border-radius:50%}
-.plBtns svg{width:26px;height:26px;fill:currentColor}
-.plStep{width:56px;height:56px;background:var(--glass-2);border:1px solid var(--line)}
-.plStep:hover{background:rgba(255,255,255,.17)}
-#plPlay{width:76px;height:76px;padding:0;background:var(--a1);color:var(--on-a1);box-shadow:0 14px 40px -6px color-mix(in srgb,var(--a1) 70%,transparent)}
-#plPlay svg{width:32px;height:32px}
-#plPlay:hover{transform:scale(1.06)}
-.plNext{text-align:center;color:var(--dim);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.plNext b{color:var(--fg);font-weight:700}
-.plLyr{position:relative;height:100%;min-height:0;overflow:hidden;-webkit-mask-image:linear-gradient(transparent,#000 22%,#000 70%,transparent);mask-image:linear-gradient(transparent,#000 22%,#000 70%,transparent)}
-.plLines{position:absolute;left:0;right:0;top:40%;display:flex;flex-direction:column;gap:clamp(10px,1.6vh,20px);transition:transform .7s var(--ease)}
-.ln{font:800 clamp(22px,2.7vw,40px)/1.18 var(--ui);letter-spacing:-.015em;color:rgba(246,245,250,.28);text-wrap:balance;cursor:pointer;transform-origin:left center;transition:color .4s,opacity .4s,filter .5s,transform .6s var(--ease);filter:blur(1.5px)}
-.ln:hover{color:rgba(246,245,250,.55);filter:none}
-.ln.past{color:rgba(246,245,250,.4)}
-.ln.on{filter:none;transform:scale(1.04);color:transparent;background:linear-gradient(90deg,#fff calc(var(--p,0)*100%),rgba(255,255,255,.42) calc(var(--p,0)*100% + 8%));-webkit-background-clip:text;background-clip:text;text-shadow:none}
-.ln.gap{font-size:clamp(18px,2vw,28px);letter-spacing:.3em}
-.plEmpty{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:14px;max-width:460px}
-.plEmpty h3{font:clamp(26px,2.6vw,36px)/1.1 var(--display)}
-.plEmpty p{color:var(--dim)}
-.plEmpty .actions button{padding:12px 20px;border-radius:99px;font-weight:800;background:var(--glass-2);border:1px solid var(--line)}
-.plEmpty .actions button.main{background:var(--a1);color:var(--on-a1);border-color:transparent}
-/* разметка слов: следующая строка подсвечена, жмёшь в момент, когда её поют */
-.syncing .ln{filter:none}
-.syncing .ln.next{color:#fff;transform:scale(1.04)}
-.syncing .ln.next::after{content:"  ← пробел";font:700 .45em var(--ui);color:var(--a1);letter-spacing:.04em;vertical-align:middle}
-.syncBar{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
-.syncBar button{padding:10px 16px;border-radius:99px;font-weight:800;background:var(--glass-2);border:1px solid var(--line)}
-.syncBar .main{background:var(--a1);color:var(--on-a1);padding:14px 26px;font-size:16px}
-.card textarea{min-height:220px;resize:vertical;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:14px;padding:12px;color:var(--fg);font:500 14px/1.5 var(--ui);user-select:text}
-@media (max-width:900px) and (orientation:portrait){.pl{grid-template-columns:1fr;overflow:auto}.plLyr{min-height:50vh}}
-@media (max-height:560px){.pl{grid-template-columns:minmax(200px,280px) minmax(0,1fr)}.plCover{max-width:34vh}.plLeft{gap:8px}#plPlay{width:56px;height:56px}.plStep{width:44px;height:44px}.plMeta h2{font-size:22px}}
-@media (pointer:coarse){.ln{filter:none}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
@@ -280,7 +235,6 @@ body.playing.touch .tbtn[hidden]{display:none}
       Clickbeat
     </div>
     <span class="grow"></span>
-    <button class="pill" id="plBtn">Плеер</button>
     <button class="pill" id="howBtn">Как играть</button>
     <button class="pill" id="setBtn">Настройки</button>
     <button class="pill" id="fsBtn">Во весь экран</button>
@@ -301,7 +255,7 @@ body.playing.touch .tbtn[hidden]{display:none}
     </section>
     <aside class="lib glass">
       <label class="add" id="drop">
-        <input type="file" id="file" accept="audio/*,.mp3,.ogg,.wav,.flac,.m4a" multiple>
+        <input type="file" id="file" accept="audio/*,.mp3,.ogg,.wav,.flac,.m4a">
         <span class="plus">+</span>
         <span><b>Добавить песню</b><small>mp3, ogg или wav: перетащи или нажми</small></span>
       </label>
@@ -311,46 +265,6 @@ body.playing.touch .tbtn[hidden]{display:none}
 
   <footer class="foot"><span><kbd>Z</kbd> <kbd>X</kbd> или мышь — нажатие</span><span><kbd>Esc</kbd> — пауза</span><span><kbd>Пробел</kbd> — пропустить вступление</span><span class="note" id="mobileNote" hidden>Игра сделана для ПК с мышью и клавиатурой.</span></footer>
 </section>
-
-<section id="player" class="screen" hidden>
-  <header class="top">
-    <button class="pill" id="plBack">← Игра</button>
-    <span class="grow"></span>
-    <button class="pill" id="plAdd">Добавить песни</button>
-    <button class="pill" id="plLrc">Слова</button>
-  </header>
-  <main class="pl">
-    <section class="plLeft">
-      <div class="cover plCover"><img id="plImg" alt=""></div>
-      <div class="plMeta"><h2 id="plTitle">Плеер</h2><p id="plArtist"></p></div>
-      <div class="plSeek"><span id="plCur">0:00</span><input type="range" id="plSeek" min="0" max="1000" value="0" aria-label="Перемотка"><span id="plDur">0:00</span></div>
-      <div class="plBtns">
-        <button class="plStep" id="plPrev" aria-label="Предыдущая"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
-        <button id="plPlay" aria-label="Играть"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
-        <button class="plStep" id="plNext" aria-label="Следующая"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
-      </div>
-      <p class="plNext" id="plUp"></p>
-      <div class="syncBar" id="syncBar" hidden><button class="main" id="syncTap">Строка!</button><button id="syncUndo">Назад</button><button id="syncStop">Отмена</button></div>
-    </section>
-    <section class="plLyr" id="plLyr"><div class="plLines" id="plLines"></div>
-      <div class="plEmpty" id="plEmpty" hidden>
-        <h3>У песни пока нет слов</h3>
-        <p id="plEmptyText">Вставь текст песни и разметь его: песня играет, а ты жмёшь пробел, когда начинается каждая строка. Минута работы.</p>
-        <div class="actions"><button class="main" id="plSync">Вставить текст и разметить</button><button id="plFind">Найти в интернете</button><button id="plFile">Файл .lrc</button></div>
-      </div>
-    </section>
-  </main>
-  <footer class="foot"><span><kbd>←</kbd> <kbd>→</kbd> — песни</span><span><kbd>Пробел</kbd> — пауза</span><span><kbd>↑</kbd> <kbd>↓</kbd> — громкость</span><span>Клавиши медиа на клавиатуре тоже работают</span></footer>
-</section>
-
-<div class="over" id="syncDlg" hidden>
-  <div class="card how">
-    <h3>Текст песни</h3>
-    <p>Каждая строка песни — с новой строки. Потом песня начнётся сначала, а ты жми <kbd>Пробел</kbd> (или кнопку «Строка!»), когда начинают петь очередную строку.</p>
-    <textarea id="syncText" spellcheck="false" placeholder="Вставь сюда текст песни"></textarea>
-    <div class="resBtns"><button class="main" id="syncGo">Разметить</button><button id="syncCancel">Отмена</button></div>
-  </div>
-</div>
 <button class="tbtn" id="tPause" aria-label="Пауза">II</button>
 <button class="tbtn" id="tSkip" hidden>Пропустить вступление</button>
 <div class="rotate" aria-live="polite"><div>Поверни телефон горизонтально<small>Так поле с нотами помещается целиком</small></div></div>

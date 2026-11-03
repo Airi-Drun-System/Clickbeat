@@ -44,21 +44,17 @@ ipcMain.handle('lyrics:find', async (_e, q) => {
   const duration = Math.round(Number(q && q.duration) || 0);
   if (!title) return null;
   try {
-    let plain = null;
     if (artist) {
       const exact = await getJson(`https://lrclib.net/api/get?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}${duration ? `&duration=${duration}` : ''}`);
-      if (exact && exact.syncedLyrics) return { synced: exact.syncedLyrics };
-      plain = (exact && exact.plainLyrics) || null;
+      if (exact && exact.syncedLyrics) return exact.syncedLyrics;
     }
-    const list = (await getJson(`https://lrclib.net/api/search?q=${encodeURIComponent(`${artist} ${title}`.trim())}`)) || [];
-    // только песни близкой длины, самая близкая первой
-    const near = (x) => !duration || Math.abs((x.duration || 0) - duration) <= 8;
-    const byDur = (a, b) => Math.abs((a.duration || 0) - duration) - Math.abs((b.duration || 0) - duration);
-    const synced = list.filter((x) => x.syncedLyrics && near(x)).sort(byDur)[0];
-    if (synced) return { synced: synced.syncedLyrics };
-    // текст без таймингов тоже пригодится: его можно разметить пробелом в плеере
-    if (!plain) { const p = list.filter((x) => x.plainLyrics && near(x)).sort(byDur)[0]; plain = p ? p.plainLyrics : null; }
-    return plain ? { plain } : null;
+    const list = await getJson(`https://lrclib.net/api/search?q=${encodeURIComponent(`${artist} ${title}`.trim())}`);
+    // берём самую близкую по длине песню, у которой есть слова с таймингами
+    const hits = (list || []).filter((x) => x.syncedLyrics);
+    hits.sort((a, b) => Math.abs((a.duration || 0) - duration) - Math.abs((b.duration || 0) - duration));
+    const best = hits[0];
+    if (!best || (duration && Math.abs((best.duration || 0) - duration) > 8)) return null;
+    return best.syncedLyrics;
   } catch { return null; }
 });
 
