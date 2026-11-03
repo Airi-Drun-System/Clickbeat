@@ -16,7 +16,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* приватный режим */ } },
 };
-const settings = Object.assign({ music: 0.8, sfx: 0.6, offset: 0, dim: 0.65, cursor: 1, trail: 0.5 }, store.get('hw.settings', {}));
+const settings = Object.assign({ music: 0.8, sfx: 0.6, offset: 0, dim: 0.65, cursor: 1, trail: 0.5, quality: 'auto' }, store.get('hw.settings', {}));
 const saveSettings = () => store.set('hw.settings', settings);
 
 const DB = (() => {
@@ -543,8 +543,22 @@ async function loadLibrary() {
 const cv = $('cv'), g0 = cv.getContext('2d');
 let g = g0;
 let W = 0, H = 0, DPR = 1;
+// качество графики: на слабом устройстве игра сама гасит свечение и снижает чёткость, чтобы держать FPS
+const touchDevice = matchMedia('(pointer: coarse)').matches;
+const fx = { level: settings.quality === 'low' ? 2 : 0 };
+let frameTimes = [];
+function qualityTick(dt) {
+  if (settings.quality !== 'auto' || state !== 'play' || paused) return;
+  frameTimes.push(dt);
+  if (frameTimes.length < 90) return;
+  const avg = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length;
+  frameTimes = [];
+  if (avg > 21 && fx.level < 2) { fx.level++; resize(); }
+}
+const GLOW = (v) => (fx.level ? 0 : v);
 function resize() {
   DPR = Math.min(2, window.devicePixelRatio || 1);
+  if (fx.level >= 2) DPR = 1; else if (touchDevice) DPR = Math.min(DPR, 1.5);
   W = innerWidth; H = innerHeight;
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   g0.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -568,8 +582,10 @@ function keyState(i, down) {
 }
 
 function field() {
-  const s = Math.min((W - 80) / PF_W, (H - 150) / PF_H);
-  return { s, ox: (W - PF_W * s) / 2, oy: (H - PF_H * s) / 2 + 14 };
+  // на низком экране (телефон боком) поле занимает почти всю высоту
+  const vy = H < 560 ? 56 : 150, vx = W < 900 ? 150 : 80;
+  const s = Math.min((W - vx) / PF_W, (H - vy) / PF_H);
+  return { s, ox: (W - PF_W * s) / 2, oy: (H - PF_H * s) / 2 + (H < 560 ? 8 : 14) };
 }
 function songTime() {
   const ct = actx.currentTime, now = performance.now();
@@ -626,6 +642,7 @@ async function startGame(auto) {
   paused = false;
   state = 'play';
   keysUI.forEach((k) => { k.n = 0; k.down = false; });
+  fingers.clear(); held = 0; frameTimes = [];
   document.body.classList.add('playing');
   document.body.classList.remove('results');
   $('menu').hidden = true; $('results').hidden = true; $('pause').hidden = true;
@@ -688,7 +705,7 @@ function press() {
   }
   if (!o) return;
   const d = t - o.t, w = G.win;
-  if (Math.hypot(c.x - o.x, c.y - o.y) > r * 1.05) {
+  if (Math.hypot(c.x - o.x, c.y - o.y) > r * (inputTouch ? 1.3 : 1.05)) { // пальцем попасть труднее: допуск шире
     // нажал вовремя, но курсор не на круге — подсказываем, без штрафа
     if (Math.abs(d) <= w.w50 + 120) G.popups.push({ x: c.x, y: c.y, txt: 'Мимо круга', col: '#FFC24B', t });
     return;
@@ -720,7 +737,7 @@ function update(t, dt) {
       if (!o.headDone && t > o.t + w.w50) { o.headDone = true; o.headHit = false; breakCombo(o.x, o.y, t); }
       if (!o.judged && t >= o.t) {
         const b = sliderPos(o, t);
-        const inside = Math.hypot(c.x - b.x, c.y - b.y) <= (o.tracking ? r * 2.4 : r * 1.05);
+        const inside = Math.hypot(c.x - b.x, c.y - b.y) <= (o.tracking ? r * 2.4 : r * (inputTouch ? 1.4 : 1.05));
         o.tracking = holding && inside;
         if (o.tracking) o.tracked = (o.tracked || 0) + dt;
         if (o.tracking) o.lastTrack = t;
@@ -886,7 +903,32 @@ addEventListener('pointermove', (e) => {
   if (game && game.auto && state === 'play') return;
   mouse.x = e.clientX; mouse.y = e.clientY;
 });
+// касания: каждый палец — своё нажатие, курсор там, где палец
+let inputTouch = false, lastTouch = 0;
+const fingers = new Map(); // pointerId -> 0 / 1 (какой «пэд» подсвечивать)
+cv.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') { if (inputTouch) { inputTouch = false; document.body.classList.remove('touch'); } return; }
+  e.preventDefault();
+  lastTouch = performance.now();
+  if (!inputTouch) { inputTouch = true; document.body.classList.add('touch'); }
+  if (state !== 'play' || paused || !game || game.auto) return;
+  const idx = fingers.size ? 1 - [...fingers.values()][0] : 0;
+  fingers.set(e.pointerId, idx);
+  try { cv.setPointerCapture(e.pointerId); } catch { /* нет захвата — не страшно */ }
+  mouse.x = e.clientX; mouse.y = e.clientY;
+  keyState(idx, true);
+  held++; press();
+}, { passive: false });
+const fingerUp = (e) => {
+  if (!fingers.has(e.pointerId)) return;
+  keyState(fingers.get(e.pointerId), false);
+  fingers.delete(e.pointerId);
+  held = Math.max(0, held - 1);
+};
+cv.addEventListener('pointerup', fingerUp);
+cv.addEventListener('pointercancel', fingerUp);
 addEventListener('mousedown', (e) => {
+  if (performance.now() - lastTouch < 800) return; // мышиное эхо от касания
   if (state !== 'play' || paused || (e.button !== 0 && e.button !== 2) || (game && game.auto)) return;
   if (e.target !== cv) return;
   keyState(e.button === 2 ? 1 : 0, true);
@@ -912,6 +954,9 @@ addEventListener('blur', () => { heldKeys.clear(); held = 0; keysUI.forEach((k) 
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') pauseGame(); });
 
 $('playBtn').addEventListener('click', () => startGame(false));
+$('tPause').addEventListener('click', () => pauseGame());
+$('tSkip').addEventListener('click', () => skipIntro());
+addEventListener('resize', () => { if (state === 'play' && touchDevice && innerHeight > innerWidth) pauseGame(); });
 $('watchBtn').addEventListener('click', () => startGame(true));
 $('resumeBtn').addEventListener('click', resumeGame);
 $('retryBtn').addEventListener('click', () => { const a = game && game.auto; stopGame(); startGame(a); });
@@ -929,6 +974,7 @@ const SET = [
   ['sCursor', 'cursor', (v) => '×' + Number(v).toFixed(1)],
   ['sTrail', 'trail', (v) => (v > 0 ? Math.round(v * 100) + '%' : 'выкл')],
 ];
+$('sQuality').addEventListener('change', () => { settings.quality = $('sQuality').value; fx.level = settings.quality === 'low' ? 2 : 0; saveSettings(); resize(); });
 for (const [id, key, fmt] of SET) {
   const el = $(id), out = $('o' + id.slice(1));
   el.addEventListener('input', () => { settings[key] = Number(el.value); out.textContent = fmt(settings[key]); applyVolumes(); saveSettings(); });
@@ -936,6 +982,7 @@ for (const [id, key, fmt] of SET) {
 
 $('setBtn').addEventListener('click', () => {
   for (const [id, key, fmt] of SET) { $(id).value = settings[key]; $('o' + id.slice(1)).textContent = fmt(settings[key]); }
+  $('sQuality').value = settings.quality;
 
   $('settings').hidden = false;
 });
@@ -1006,7 +1053,7 @@ function drawNote(x, y, R, ci, alpha, num, scale) {
     g.fillStyle = '#FFFFFF';
     g.font = DISPLAY(Math.round(R * 0.74 * s));
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.shadowColor = 'rgba(0,0,0,0.35)'; g.shadowBlur = 6;
+    g.shadowColor = 'rgba(0,0,0,0.35)'; g.shadowBlur = GLOW(6);
     g.fillText(num, x, y + R * 0.06);
   }
   g.restore();
@@ -1031,20 +1078,29 @@ function drawBackground(t, beatPulse) {
   let bass = 0;
   if (analyser && state === 'play') { analyser.getByteFrequencyData(freq); bass = (freq[1] + freq[2] + freq[3] + freq[4]) / 1020; }
   const k = 1 - settings.dim * 0.8;
-  // свет из центра качается от баса и бита
-  const gr = g.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.6);
-  gr.addColorStop(0, hexA(COLORS[0], (0.1 + bass * 0.22 + beatPulse * 0.06) * k));
-  gr.addColorStop(1, 'rgba(9,9,13,0)');
-  g.fillStyle = gr;
-  g.fillRect(0, 0, W, H);
-  if (analyser && state === 'play') {
-    const n = 64, bw = W / n;
+  // свет из центра качается от баса и бита (готовая картинка: дешевле, чем градиент каждый кадр)
+  const glow = glowSprite(), gs = Math.max(W, H) * 1.25;
+  g.globalAlpha = Math.min(1, (0.1 + bass * 0.22 + beatPulse * 0.06) * k);
+  g.drawImage(glow, W / 2 - gs / 2, H / 2 - gs / 2, gs, gs);
+  g.globalAlpha = 1;
+  if (analyser && state === 'play' && fx.level === 0) {
+    const n = 48, bw = W / n;
     g.fillStyle = hexA(COLORS[1], 0.22 * k);
     for (let i = 0; i < n; i++) {
       const v = freq[Math.floor(i * freq.length / n * 0.8)] / 255, h = v * H * 0.16;
-      g.beginPath(); g.roundRect(i * bw + 2, H - h, bw - 4, h + 6, 4); g.fill();
+      g.fillRect(i * bw + 2, H - h, bw - 4, h);
     }
   }
+}
+let glowC = null, glowFor = '';
+function glowSprite() {
+  if (glowC && glowFor === COLORS[0]) return glowC;
+  glowFor = COLORS[0];
+  glowC = document.createElement('canvas'); glowC.width = glowC.height = 256;
+  const x = glowC.getContext('2d'), gr = x.createRadialGradient(128, 128, 0, 128, 128, 128);
+  gr.addColorStop(0, hexA(COLORS[0], 1)); gr.addColorStop(1, hexA(COLORS[0], 0));
+  x.fillStyle = gr; x.fillRect(0, 0, 256, 256);
+  return glowC;
 }
 
 function drawGame(t) {
@@ -1125,7 +1181,7 @@ function drawSlider(o, t, f, R, fadeIn) {
     const b = sliderPos(o, t);
     g.save();
     g.fillStyle = '#FFFFFF';
-    g.shadowColor = col; g.shadowBlur = 16;
+    g.shadowColor = col; g.shadowBlur = GLOW(16);
     g.beginPath(); g.arc(X(b.x), Y(b.y), R * 0.62, 0, Math.PI * 2); g.fill();
     g.shadowBlur = 0;
     g.strokeStyle = col; g.lineWidth = R * 0.14;
@@ -1150,7 +1206,7 @@ function drawSpinner(o, t, f, fadeIn) {
   g.lineCap = 'round';
   g.strokeStyle = 'rgba(255,255,255,0.12)'; g.lineWidth = 14;
   g.beginPath(); g.arc(cx, cy, Rr, 0, Math.PI * 2); g.stroke();
-  g.strokeStyle = COLORS[0]; g.shadowColor = COLORS[0]; g.shadowBlur = 18;
+  g.strokeStyle = COLORS[0]; g.shadowColor = COLORS[0]; g.shadowBlur = GLOW(18);
   g.beginPath(); g.arc(cx, cy, Rr, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2); g.stroke();
   g.shadowBlur = 0;
   // три метки вращаются вместе с курсором
@@ -1218,7 +1274,7 @@ function drawLyrics(t) {
   g.fillText(cur.text, W / 2, y + (1 - appear) * 10);
   g.beginPath(); g.rect(x0 - 4, y - 30, (w + 8) * k, 60); g.clip();
   g.fillStyle = '#FFFFFF';
-  g.shadowColor = COLORS[0]; g.shadowBlur = 16;
+  g.shadowColor = COLORS[0]; g.shadowBlur = GLOW(16);
   g.fillText(cur.text, W / 2, y + (1 - appear) * 10);
   g.restore();
   if (next && next.text && next.t - t < 3000) {
@@ -1333,6 +1389,7 @@ function drawCursor() {
     g.lineWidth = 2.5 * (1 - k) + 1;
     g.beginPath(); g.arc(r.x, r.y, 12 * settings.cursor + ease(k) * 34, 0, Math.PI * 2); g.stroke();
   }
+  if (inputTouch && !(game && game.auto)) return;
   const life = 30 + 150 * settings.trail;
   while (trail.length && now - trail[0].t > life) trail.shift();
   const cs = 13 * settings.cursor * (held > 0 ? 1.15 : 1);
@@ -1349,7 +1406,7 @@ function drawCursor() {
     g.restore();
   }
   g.save();
-  g.shadowColor = COLORS[0]; g.shadowBlur = 16;
+  g.shadowColor = COLORS[0]; g.shadowBlur = GLOW(16);
   g.fillStyle = '#FFFFFF';
   g.beginPath(); g.arc(mouse.x, mouse.y, cs * 0.45, 0, Math.PI * 2); g.fill();
   g.shadowBlur = 0;
@@ -1399,6 +1456,8 @@ function frame(now) {
   if (state === 'play' && game && actx) {
     const t = songTime();
     if (game.auto && !paused) autoPilot(t);
+    qualityTick(dt);
+    $('tSkip').hidden = !(inputTouch && !paused && game.objs[0].t - t > 3000);
     if (!paused && !game.failed) update(t, lastT === null ? 0 : Math.max(0, Math.min(50, t - lastT)));
     lastT = t;
     drawGame(t);

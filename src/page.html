@@ -38,7 +38,7 @@ button:active:not(:disabled){transform:scale(.96)}
 .backdrop .img{position:absolute;inset:-12%;background-size:cover;background-position:center;filter:blur(70px) saturate(1.5);opacity:.55;transform:scale(1.1);transition:background-image .6s,opacity .6s}
 .backdrop .shade{position:absolute;inset:0;background:radial-gradient(120% 90% at 25% 40%,transparent 0,rgba(9,9,13,.55) 55%,rgba(9,9,13,.92) 100%)}
 body.playing .backdrop,body.results .backdrop{opacity:0}
-#cv{position:fixed;inset:0;width:100%;height:100%;display:block}
+#cv{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
 body.playing #cv{cursor:none}
 body:not(.playing):not(.results) #cv{pointer-events:none}
 
@@ -165,8 +165,55 @@ kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--lin
 .row output{font-variant-numeric:tabular-nums;color:var(--a1);font-weight:700}
 .row input[type=range]{grid-column:1/-1;accent-color:var(--a1)}
 .row small{grid-column:1/-1;color:var(--dim);font-size:12px}
+.sel{grid-column:1/-1;background:rgba(255,255,255,.08);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-weight:600}
+.sel option{background:#16161e}
 
-@media (max-width:900px){
+/* управление пальцами: пауза и пропуск вступления кнопками на экране */
+.tbtn{position:fixed;z-index:4;display:none;padding:10px 18px;border-radius:99px;background:rgba(255,255,255,.12);border:1px solid var(--line);font-weight:800;font-size:15px;color:var(--fg)}
+body.playing.touch .tbtn{display:block}
+body.playing.touch .tbtn[hidden]{display:none}
+#tPause{top:max(10px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);width:52px;height:40px;padding:0;letter-spacing:2px}
+#tSkip{bottom:max(64px,calc(env(safe-area-inset-bottom,0px) + 54px));left:50%;transform:translateX(-50%)}
+.rotate{position:fixed;inset:0;z-index:9;display:none;place-items:center;text-align:center;padding:24px;background:rgba(9,9,13,.94);font:22px var(--display)}
+.rotate small{display:block;margin-top:10px;font:600 15px var(--ui);color:var(--dim)}
+@media (orientation:portrait) and (max-width:900px){body.playing .rotate{display:grid}}
+
+/* телефоны и планшеты: без тяжёлого размытия под стеклом, меньше размытия фона */
+@media (pointer:coarse){
+  .glass,.pill,.over{backdrop-filter:none}
+  .glass{background:rgba(22,22,30,.88)}
+  .backdrop .img{filter:blur(40px) saturate(1.4)}
+  .foot{display:none}
+  .song .del{opacity:1}
+}
+/* телефон боком: экран низкий */
+@media (max-height:560px){
+  .screen{gap:10px;padding-block:max(10px,env(safe-area-inset-top,0px)) max(10px,env(safe-area-inset-bottom,0px))}
+  .cover{width:clamp(140px,22vw,200px)}
+  #hTitle{font-size:clamp(24px,3.4vw,36px)}
+  .info{gap:8px}
+  .play,.watch{height:48px}
+  .play{font-size:18px;padding:0 30px}
+  .diff{padding:8px 10px}
+  .foot{display:none}
+}
+
+/* телефон боком: две колонки, всё на одном экране */
+@media (max-height:560px) and (orientation:landscape){
+  .stage{grid-template-columns:minmax(0,1fr) minmax(220px,280px);gap:12px}
+  .hero{grid-template-columns:auto minmax(0,1fr);gap:16px}
+  .cover{width:clamp(110px,18vw,170px);border-radius:20px}
+  .top .pill{padding:7px 12px;font-size:13px}
+  .brand{font-size:20px}
+  .brand svg{width:32px;height:32px}
+  .mods{display:none}
+  .extras{display:none}
+  .lib{padding:8px}
+  .add{padding:8px}
+  .add .plus{width:36px;height:36px}
+  .info{overflow:auto;max-height:100%}
+}
+@media (max-width:900px) and (orientation:portrait){
   .stage{grid-template-columns:1fr;overflow:auto}
   .hero{grid-template-columns:1fr}
   .lib{min-height:320px}
@@ -218,6 +265,9 @@ kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--lin
 
   <footer class="foot"><span><kbd>Z</kbd> <kbd>X</kbd> или мышь — нажатие</span><span><kbd>Esc</kbd> — пауза</span><span><kbd>Пробел</kbd> — пропустить вступление</span><span class="note" id="mobileNote" hidden>Игра сделана для ПК с мышью и клавиатурой.</span></footer>
 </section>
+<button class="tbtn" id="tPause" aria-label="Пауза">II</button>
+<button class="tbtn" id="tSkip" hidden>Пропустить вступление</button>
+<div class="rotate" aria-live="polite"><div>Поверни телефон горизонтально<small>Так поле с нотами помещается целиком</small></div></div>
 <input type="file" id="imgFile" accept="image/*" hidden>
 <input type="file" id="lrcFile" accept=".lrc,.txt,text/plain" hidden>
 
@@ -258,6 +308,7 @@ kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--lin
     <div class="row"><label for="sOffset">Сдвиг звука</label><output id="oOffset"></output><input type="range" id="sOffset" min="-150" max="150" step="1"><small>Если ноты приходят раньше музыки — двигай вправо. Проще нажать «Подстроить» после игры.</small></div>
     <div class="row"><label for="sDim">Затемнение фона</label><output id="oDim"></output><input type="range" id="sDim" min="0" max="1" step="0.05"></div>
     <div class="row"><label for="sTrail">Хвост курсора</label><output id="oTrail"></output><input type="range" id="sTrail" min="0" max="1" step="0.05"></div>
+    <div class="row"><label for="sQuality">Качество графики</label><select id="sQuality" class="sel"><option value="auto">Авто: снижается, если тормозит</option><option value="high">Высокое</option><option value="low">Низкое: для слабых телефонов</option></select></div>
     <div class="row"><label for="sCursor">Размер курсора</label><output id="oCursor"></output><input type="range" id="sCursor" min="0.5" max="2" step="0.1"></div>
     <div class="menuBtns"><button class="main" id="setClose">Готово</button></div>
   </div>
