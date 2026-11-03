@@ -1,0 +1,28 @@
+{
+  "name": "clickbeat",
+  "productName": "Clickbeat",
+  "version": "0.1.0",
+  "description": "Ритм-игра для ПК: любая песня становится уровнем",
+  "author": "VegasDev",
+  "license": "UNLICENSED",
+  "main": "main.js",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node test/core.test.js && node test/trap.test.js",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --win nsis portable --publish never"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.vegasdev.clickbeat",
+    "productName": "Clickbeat",
+    "icon": "build/icon.png",
+    "files": ["main.js", "preload.js", "app/**", "package.json"],
+    "win": { "target": ["nsis", "portable"] },
+    "nsis": { "artifactName": "Clickbeat-${version}-setup.exe", "oneClick": false, "allowToChangeInstallationDirectory": true },
+    "portable": { "artifactName": "Clickbeat-${version}-portable.exe" }
+  }
+}

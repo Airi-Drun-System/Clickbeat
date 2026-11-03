@@ -1,0 +1,282 @@
+<title>Clickbeat</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Onest:wght@400;500;600;700;800&display=swap">
+<style>
+/* Clickbeat: вся игра красится в цвета обложки выбранной песни. Слева — сцена с обложкой, справа — библиотека. */
+:root{
+  color-scheme:dark;
+  --ink:#09090D;                 /* основа */
+  --glass:rgba(255,255,255,.065);
+  --glass-2:rgba(255,255,255,.11);
+  --line:rgba(255,255,255,.11);
+  --fg:#F6F5FA;
+  --dim:rgba(246,245,250,.62);
+  --a1:#FF4D8D;                  /* цвета песни: меняются из кода */
+  --a2:#7C5CFF;
+  --a3:#29D3C0;
+  --on-a1:#14060B;
+  --bad:#FF5468;
+  --display:"Dela Gothic One","Arial Black",system-ui,sans-serif;
+  --ui:"Onest","Segoe UI",system-ui,sans-serif;
+  --ease:cubic-bezier(.22,1,.36,1);
+  --spring:cubic-bezier(.34,1.56,.64,1);
+  --beat:.47s;
+}
+[hidden]{display:none!important}
+h1,h2,h3,p,ul{margin:0}
+html,body{height:100%}
+body{background:var(--ink);color:var(--fg);font:500 15px/1.5 var(--ui);overflow:hidden;user-select:none}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;transition:transform .18s var(--ease),background .25s,color .25s,border-color .25s,box-shadow .3s,opacity .2s}
+button:active:not(:disabled){transform:scale(.96)}
+:focus-visible{outline:2px solid var(--a1);outline-offset:3px}
+
+/* фон меню: обложка песни, сильно размытая */
+.backdrop{position:fixed;inset:0;overflow:hidden;background:var(--ink)}
+.backdrop .img{position:absolute;inset:-12%;background-size:cover;background-position:center;filter:blur(70px) saturate(1.5);opacity:.55;transform:scale(1.1);transition:background-image .6s,opacity .6s}
+.backdrop .shade{position:absolute;inset:0;background:radial-gradient(120% 90% at 25% 40%,transparent 0,rgba(9,9,13,.55) 55%,rgba(9,9,13,.92) 100%)}
+body.playing .backdrop,body.results .backdrop{opacity:0}
+#cv{position:fixed;inset:0;width:100%;height:100%;display:block}
+body.playing #cv{cursor:none}
+body:not(.playing):not(.results) #cv{pointer-events:none}
+
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;gap:18px;padding-block:max(20px,env(safe-area-inset-top,0px)) max(18px,env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));animation:fade .4s var(--ease) both}
+@keyframes fade{from{opacity:0}}
+@keyframes rise{from{opacity:0;transform:translateY(18px);filter:blur(8px)}}
+.glass{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(24px) saturate(1.3);border-radius:22px}
+
+/* ---------- шапка ---------- */
+.top{display:flex;align-items:center;gap:12px;max-width:1280px;width:100%;margin:0 auto}
+.brand{display:flex;align-items:center;gap:10px;font:24px var(--display);letter-spacing:-.01em}
+.brand svg{width:40px;height:40px;filter:drop-shadow(0 0 12px color-mix(in srgb,var(--a1) 60%,transparent))}
+.grow{flex:1}
+.pill{padding:9px 16px;border-radius:99px;background:var(--glass);border:1px solid var(--line);font-weight:700;font-size:14px;backdrop-filter:blur(16px)}
+.pill:hover{background:var(--glass-2)}
+
+/* ---------- сцена ---------- */
+.stage{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,380px);gap:22px;max-width:1280px;width:100%;margin:0 auto}
+.hero{display:grid;grid-template-columns:auto minmax(0,1fr);gap:34px;align-items:center;min-width:0}
+.coverWrap{perspective:900px}
+.cover{position:relative;width:clamp(200px,27vw,340px);aspect-ratio:1;max-width:100%;border-radius:28px;overflow:hidden;background:#15151c;box-shadow:0 30px 80px -10px color-mix(in srgb,var(--a1) 45%,transparent),0 0 0 1px rgba(255,255,255,.08);transform-style:preserve-3d;transition:transform .5s var(--ease),box-shadow .6s;animation:beat var(--beat) ease-out infinite}
+.cover img{width:100%;height:100%;object-fit:cover;display:block}
+@keyframes beat{0%{scale:1.025}35%,100%{scale:1}}
+.info{display:flex;flex-direction:column;gap:14px;min-width:0}
+.info.swap>*{animation:rise .6s var(--ease) both}
+.info.swap>:nth-child(2){animation-delay:.04s}.info.swap>:nth-child(3){animation-delay:.08s}.info.swap>:nth-child(4){animation-delay:.12s}.info.swap>:nth-child(5){animation-delay:.16s}.info.swap>:nth-child(6){animation-delay:.2s}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:4px 11px;border-radius:99px;background:var(--glass-2);font:700 12px var(--ui);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.chip.a{background:var(--a1);color:var(--on-a1)}
+#hTitle{font:clamp(34px,4.4vw,62px)/1.02 var(--display);letter-spacing:-.02em;text-wrap:balance;overflow-wrap:anywhere;max-height:3.1em;overflow:hidden}
+#hArtist{color:var(--dim);font-size:17px;margin-top:-6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.diffs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.diff{position:relative;padding:11px 12px;border-radius:16px;background:var(--glass);border:1.5px solid transparent;text-align:left;display:flex;flex-direction:column;gap:0;min-width:0}
+.diff:hover{background:var(--glass-2)}
+.diff.on{border-color:var(--a1);background:color-mix(in srgb,var(--a1) 16%,transparent)}
+.diff b{font-weight:800;font-size:14px}
+.diff small{color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}
+.diff .grade{position:absolute;top:8px;right:10px;font:15px var(--display)}
+.mods{display:flex;gap:6px;flex-wrap:wrap}
+.mod{padding:6px 12px;border-radius:99px;border:1.5px solid var(--line);font-weight:700;font-size:13px;color:var(--dim)}
+.mod:hover{color:var(--fg);border-color:rgba(255,255,255,.3)}
+.mod.on{background:var(--fg);color:var(--ink);border-color:var(--fg)}
+.mod small{opacity:.7;font-weight:600}
+.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.play{height:60px;padding:0 44px;border-radius:99px;font:22px var(--display);letter-spacing:.01em;color:var(--on-a1);background:var(--a1);box-shadow:0 14px 40px -6px color-mix(in srgb,var(--a1) 70%,transparent),inset 0 1px 0 rgba(255,255,255,.35);transition:transform .25s var(--spring),box-shadow .3s,background .6s}
+.play:hover{transform:translateY(-2px) scale(1.03)}
+.play:disabled{opacity:.45;cursor:default;transform:none}
+.watch{height:60px;padding:0 24px;border-radius:99px;font-weight:800;background:var(--glass-2);border:1px solid var(--line)}
+.watch:hover{background:rgba(255,255,255,.17)}
+.extras{display:flex;gap:6px;align-items:center;color:var(--dim);font-size:13px;flex-wrap:wrap}
+.extras button{padding:5px 12px;border-radius:99px;border:1px dashed rgba(255,255,255,.25);font-weight:700;font-size:13px;color:var(--dim)}
+.extras button:hover{color:var(--fg);border-style:solid}
+.extras button.set{border-style:solid;color:var(--a3);border-color:color-mix(in srgb,var(--a3) 60%,transparent)}
+
+/* ---------- библиотека ---------- */
+.lib{display:flex;flex-direction:column;gap:10px;min-height:0;padding:12px}
+.add{position:relative;display:flex;gap:12px;align-items:center;padding:12px;border-radius:16px;border:1.5px dashed rgba(255,255,255,.22);cursor:pointer;transition:border-color .2s,background .2s}
+.add:hover,.add.over{border-color:var(--a1);background:color-mix(in srgb,var(--a1) 10%,transparent)}
+.add .plus{flex:none;width:44px;height:44px;border-radius:12px;background:var(--a1);color:var(--on-a1);display:grid;place-items:center;font:24px var(--display)}
+.add b{display:block;font-weight:800}
+.add small{color:var(--dim);font-size:12px}
+.add input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.songs{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:4px;margin:0 -4px;padding:0 4px}
+.song{position:relative;display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:0 12px;align-items:center;text-align:left;padding:8px;border-radius:14px;cursor:pointer;animation:rise .45s var(--ease) both;animation-delay:calc(var(--i,0)*35ms)}
+.song:hover{background:var(--glass)}
+.song.on{background:var(--glass-2)}
+.song.on::before{content:"";position:absolute;left:-4px;top:14px;bottom:14px;width:4px;border-radius:4px;background:var(--a1)}
+.song img{grid-row:span 2;width:48px;height:48px;border-radius:10px;object-fit:cover;background:#1a1a22}
+.song b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.song small{color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.song .del{grid-row:span 2;width:30px;height:30px;border-radius:99px;color:var(--dim);display:grid;place-items:center;font-size:18px;line-height:1;opacity:0}
+.song:hover .del,.song .del:focus-visible{opacity:1}
+.song .del:hover{background:rgba(255,84,104,.18);color:var(--bad)}
+.song .del.sure{opacity:1;width:auto;padding:0 10px;font-size:12px;font-weight:800;background:rgba(255,84,104,.2);color:var(--bad)}
+.foot{display:flex;flex-wrap:wrap;gap:8px 16px;color:var(--dim);font-size:13px;max-width:1280px;width:100%;margin:0 auto}
+kbd{font:700 12px var(--ui);background:var(--glass-2);border:1px solid var(--line);border-radius:6px;padding:0 6px;color:var(--fg)}
+.note{color:var(--a3)}
+
+/* ---------- оверлеи ---------- */
+.over{position:fixed;inset:0;display:grid;place-items:center;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:rgba(6,6,9,.6);backdrop-filter:blur(14px);animation:fade .25s both;z-index:5}
+.card{background:rgba(22,22,30,.82);border:1px solid var(--line);border-radius:28px;padding:28px;width:min(460px,100%);display:flex;flex-direction:column;gap:14px;animation:pop .45s var(--spring) both;box-shadow:0 40px 100px rgba(0,0,0,.5)}
+@keyframes pop{from{opacity:0;transform:scale(.94) translateY(12px)}}
+.card h3{font:26px var(--display);letter-spacing:-.01em}
+.card p{color:var(--dim)}
+.bar{height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:99px;background:var(--a1);transition:width .2s}
+.menuBtns{display:flex;flex-direction:column;gap:8px}
+.menuBtns button{padding:14px;border-radius:16px;background:var(--glass-2);font-weight:800;font-size:16px}
+.menuBtns button:hover{background:rgba(255,255,255,.17)}
+.menuBtns button.main{background:var(--a1);color:var(--on-a1)}
+.count{font:150px/1 var(--display);color:var(--fg);text-shadow:0 0 50px var(--a1);animation:pop .45s var(--spring) both}
+
+/* результаты */
+.res{width:min(820px,100%);display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px 34px;align-items:center;padding:34px}
+.res .bigGrade{grid-row:span 3;font:clamp(110px,15vw,170px)/1 var(--display);color:var(--gc);text-shadow:0 0 60px var(--gc);animation:gradeIn .9s var(--spring) both}
+@keyframes gradeIn{from{opacity:0;transform:scale(1.7) rotate(-10deg)}}
+.res h3{font:700 18px var(--ui);color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.res .score{font:54px/1 var(--display);font-variant-numeric:tabular-nums}
+.stats{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.stat{background:rgba(255,255,255,.06);border-radius:16px;padding:12px 14px}
+.stat small{color:var(--dim);display:block;font-size:12px}
+.stat b{font:22px var(--display);font-variant-numeric:tabular-nums}
+.hint{grid-column:1/-1;display:flex;gap:12px;align-items:center;background:color-mix(in srgb,var(--a3) 12%,transparent);border:1px solid color-mix(in srgb,var(--a3) 40%,transparent);border-radius:16px;padding:12px 16px}
+.hint span{flex:1}
+.hint button{background:var(--a3);color:#04120f;font-weight:800;padding:8px 14px;border-radius:99px}
+.resBtns{grid-column:1/-1;display:flex;gap:8px}
+.resBtns button{flex:1;padding:16px;border-radius:18px;font-weight:800;font-size:16px;background:var(--glass-2)}
+.resBtns button.main{background:var(--a1);color:var(--on-a1)}
+.newBest{font-weight:800;color:var(--a1);animation:pop .6s var(--spring) .4s both}
+
+/* как играть */
+.how{width:min(560px,100%)}
+.how ul{display:flex;flex-direction:column;gap:10px;padding-left:18px;color:var(--dim)}
+.how li b{color:var(--fg)}
+.demo{position:relative;height:120px;display:grid;place-items:center;border-radius:18px;background:rgba(255,255,255,.04)}
+.demo .dot{width:64px;height:64px;border-radius:50%;background:var(--a1);border:6px solid #fff;display:grid;place-items:center;font:24px var(--display);animation:tap 1.6s var(--ease) infinite}
+.demo .ring{position:absolute;width:64px;height:64px;border-radius:50%;border:3px solid var(--a1);animation:close 1.6s linear infinite}
+@keyframes close{0%{transform:scale(3.2);opacity:0}15%{opacity:1}62%{transform:scale(1);opacity:1}63%,100%{transform:scale(1);opacity:0}}
+@keyframes tap{0%,60%{transform:scale(1);opacity:1}72%{transform:scale(1.35);opacity:0}100%{transform:scale(1);opacity:0}}
+
+/* настройки */
+.row{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center}
+.row label{font-weight:700}
+.row output{font-variant-numeric:tabular-nums;color:var(--a1);font-weight:700}
+.row input[type=range]{grid-column:1/-1;accent-color:var(--a1)}
+.row small{grid-column:1/-1;color:var(--dim);font-size:12px}
+
+@media (max-width:900px){
+  .stage{grid-template-columns:1fr;overflow:auto}
+  .hero{grid-template-columns:1fr}
+  .lib{min-height:320px}
+  .diffs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .res{grid-template-columns:1fr}
+  .res .bigGrade{grid-row:auto}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="backdrop" aria-hidden="true"><div class="img" id="bgImg"></div><div class="shade"></div></div>
+<canvas id="cv"></canvas>
+
+<section id="menu" class="screen">
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21" fill="none" stroke="var(--a1)" stroke-width="3" opacity=".55"/><circle cx="24" cy="24" r="14" fill="var(--a1)"/><circle cx="24" cy="24" r="14" fill="none" stroke="#fff" stroke-width="3.2"/><path d="M17 25h3l2-6 3 11 2-7h4" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Clickbeat
+    </div>
+    <span class="grow"></span>
+    <button class="pill" id="howBtn">Как играть</button>
+    <button class="pill" id="setBtn">Настройки</button>
+    <button class="pill" id="fsBtn">Во весь экран</button>
+  </header>
+
+  <main class="stage">
+    <section class="hero">
+      <div class="coverWrap"><div class="cover" id="cover"><img id="coverImg" alt=""></div></div>
+      <div class="info" id="info">
+        <div class="chips" id="hChips"></div>
+        <h1 id="hTitle">Clickbeat</h1>
+        <p id="hArtist"></p>
+        <div class="diffs" id="diffs"></div>
+        <div class="mods" id="mods"></div>
+        <div class="actions"><button class="play" id="playBtn">Играть</button><button class="watch" id="watchBtn">Смотреть</button></div>
+        <div class="extras"><span>На фоне:</span><button id="bgBtn">Своя картинка</button><button id="lrcBtn">Слова (.lrc)</button></div>
+      </div>
+    </section>
+    <aside class="lib glass">
+      <label class="add" id="drop">
+        <input type="file" id="file" accept="audio/*,.mp3,.ogg,.wav,.flac,.m4a">
+        <span class="plus">+</span>
+        <span><b>Добавить песню</b><small>mp3, ogg или wav: перетащи или нажми</small></span>
+      </label>
+      <div class="songs" id="songs"></div>
+    </aside>
+  </main>
+
+  <footer class="foot"><span><kbd>Z</kbd> <kbd>X</kbd> или мышь — нажатие</span><span><kbd>Esc</kbd> — пауза</span><span><kbd>Пробел</kbd> — пропустить вступление</span><span class="note" id="mobileNote" hidden>Игра сделана для ПК с мышью и клавиатурой.</span></footer>
+</section>
+<input type="file" id="imgFile" accept="image/*" hidden>
+<input type="file" id="lrcFile" accept=".lrc,.txt,text/plain" hidden>
+
+<div class="over" id="loading" hidden>
+  <div class="card"><h3 id="loadTitle">Слушаю песню</h3><p id="loadText">Ищу удары и темп…</p><div class="bar"><i id="loadBar"></i></div></div>
+</div>
+
+<div class="over" id="pause" hidden>
+  <div class="card"><h3>Пауза</h3>
+    <div class="menuBtns"><button class="main" id="resumeBtn">Продолжить</button><button id="retryBtn">Заново</button><button id="quitBtn">В меню</button></div>
+  </div>
+</div>
+
+<div class="over" id="countdown" hidden><div class="count" id="countNum">3</div></div>
+
+<div class="over" id="results" hidden>
+  <div class="res card">
+    <div class="bigGrade" id="rGrade">S</div>
+    <h3 id="rTitle"></h3>
+    <div class="score" id="rScore">0</div>
+    <div id="rSub"></div>
+    <div class="stats">
+      <div class="stat"><small>Точность</small><b id="rAcc"></b></div>
+      <div class="stat"><small>Макс. комбо</small><b id="rCombo"></b></div>
+      <div class="stat"><small>300 / 100 / 50</small><b id="rHits"></b></div>
+      <div class="stat"><small>Промахи</small><b id="rMiss"></b></div>
+    </div>
+    <div class="hint" id="rHint" hidden><span id="rHintText"></span><button id="rFix">Подстроить</button></div>
+    <div class="resBtns"><button class="main" id="rRetry">Ещё раз</button><button id="rMenu">В меню</button></div>
+  </div>
+</div>
+
+<div class="over" id="settings" hidden>
+  <div class="card">
+    <h3>Настройки</h3>
+    <div class="row"><label for="sMusic">Громкость музыки</label><output id="oMusic"></output><input type="range" id="sMusic" min="0" max="1" step="0.05"></div>
+    <div class="row"><label for="sSfx">Громкость ударов</label><output id="oSfx"></output><input type="range" id="sSfx" min="0" max="1" step="0.05"></div>
+    <div class="row"><label for="sOffset">Сдвиг звука</label><output id="oOffset"></output><input type="range" id="sOffset" min="-150" max="150" step="1"><small>Если ноты приходят раньше музыки — двигай вправо. Проще нажать «Подстроить» после игры.</small></div>
+    <div class="row"><label for="sDim">Затемнение фона</label><output id="oDim"></output><input type="range" id="sDim" min="0" max="1" step="0.05"></div>
+    <div class="row"><label for="sTrail">Хвост курсора</label><output id="oTrail"></output><input type="range" id="sTrail" min="0" max="1" step="0.05"></div>
+    <div class="row"><label for="sCursor">Размер курсора</label><output id="oCursor"></output><input type="range" id="sCursor" min="0.5" max="2" step="0.1"></div>
+    <div class="menuBtns"><button class="main" id="setClose">Готово</button></div>
+  </div>
+</div>
+
+<div class="over" id="howto" hidden>
+  <div class="card how">
+    <h3>Как играть</h3>
+    <div class="demo" aria-hidden="true"><span class="ring"></span><span class="dot">1</span></div>
+    <ul>
+      <li><b>Наведи курсор на круг.</b> Цифры показывают, в каком порядке их нажимать.</li>
+      <li><b>Жми Z, X или кнопку мыши, когда кольцо сойдётся с кругом.</b> Раньше или позже — меньше очков. Если нажать слишком рано, игра напишет «Рано».</li>
+      <li><b>Слайдер:</b> нажми на начало и держи, веди курсор за шариком до конца дорожки.</li>
+      <li><b>Спиннер:</b> зажми кнопку и крути мышь по кругу, пока не заполнится кольцо.</li>
+      <li><b>Не понятно?</b> Нажми «Смотреть» — игра сама пройдёт песню и покажет, как надо.</li>
+    </ul>
+    <div class="menuBtns"><button class="main" id="howGo">Понятно, играть</button></div>
+  </div>
+</div>
+
+<script>/*CORE*/</script>
+<script>/*GAME*/</script>
